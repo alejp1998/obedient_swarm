@@ -1,0 +1,148 @@
+# ========== Python ==========
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyde
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.Python
+*.manifest
+*.spec
+
+# Installer logs
+*.egg
+*.egg-info
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Flask
+instance/
+.webassets-cache
+.env
+.env.*
+
+# SQLite
+*.sqlite
+*.db
+*.db-journal
+
+# ========== Frontend ========== 
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+
+# Build files
+/dist/
+/build/
+/out/
+/public/
+*.js.map
+*.css.map
+*.sass.map
+*.tsbuildinfo
+
+# Bundle analysis
+stats.html
+.next/
+.cache/
+.vscode/
+
+# Webpack
+.webpack/
+
+# Parcel
+.parcel-cache/
+
+# Babel
+.esm-cache/
+
+# ========== Environment ==========
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.flaskenv
+
+# ========== Editors ==========
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ========== OS Generated ==========
+.DS_Store
+.DS_Store?
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+
+# ========== Documentation ==========
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
+
+# ========== Local Development ==========
+*.local.yaml
+*.local.yml
+
+# ========== Logs ==========
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ========== Debug Files ==========
+*.pid
+*.seed
+*.pid.lock
+*.launch
+
+# ========== Jupyter ==========
+.ipynb_checkpoints/
+
+# ========== Docker ==========
+# Uncomment if not using Docker
+# docker-compose.yml
+# Dockerfile
+# .dockerignore

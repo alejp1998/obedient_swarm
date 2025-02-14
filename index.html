@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Obedient Swarm</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.3/css/bulma.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- DM Sans font import -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=DM+Sans" />
+
+  <!-- DM Sans font style -->
+  <!-- This sets the fonts to user in the body in order of preference -->
+  <style>
+    body {
+      font-family: "DM Sans", sans-serif;
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+  <section class="section p-4">
+    <div class="columns is-variable is-2">
+      <!-- Left Column - Data Tree -->
+      <div class="column is-2">
+        <p class="title is-3 mb-5 has-text-grey-dark">Groups Data</p>
+        <div id="treeView" class="has-background-white"></div>
+      </div>
+
+      <!-- Center Column - Simulation -->
+      <div class="column is-7">
+        <div class="is-flex is-justify-content-space-between mb-0">
+          <p class="title is-3 has-text-grey-dark">Simulation</p>
+          <div class="buttons">
+            <button id="pause-button" class="button is-link">
+              <span class="icon"><i class="fas fa-pause"></i></span>
+              <span class="text">Pause</span>
+            </button>
+            <button id="reset-button" class="button is-warning">
+              <span class="icon"><i class="fas fa-redo"></i></span>
+              <span class="text">Reset</span>
+            </button>
+            <button id="stop-button" class="button is-danger" disabled>
+              <span class="icon"><i class="fas fa-stop"></i></span>
+              <span class="text">Stop</span>
+            </button>
+          </div>
+          <span id="stepCounter" class="tag is-primary is-light is-large" style="min-width: 180px;">Step: 0</span>
+        </div>
+        <div id="canvasContainer">
+          <canvas id="canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Right Column - Controls & Chat -->
+      <div class="column is-3">
+        <p class="title is-3 mb-5 has-text-grey-dark has-text-right">Obedient Swarm</p>
+        <div id="controlPanel">
+          <div id="chatInput" class="mt-5">
+            <div id="chatLog">
+              <!-- Chat messages go here -->
+            </div>
+            <div class="field mt-4">
+              <div class="control has-icons-right">
+                <input id="chatMessage" class="input is-rounded" type="text" placeholder="Type message...">
+                <span id="sendButton" class="icon is-right is-clickable">
+                  <i class="fas fa-paper-plane has-text-link"></i>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script src="main.js"></script>
+</body>
+</html>
