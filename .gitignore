@@ -63,7 +63,7 @@ yarn-error.log*
 /dist/
 /build/
 /out/
-/public/
+# /public/
 *.js.map
 *.css.map
 *.sass.map
