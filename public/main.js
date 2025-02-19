@@ -223,25 +223,38 @@ function drawMap() {
 
 // Draw a destination marker (a cross) for the group
 function drawDestination(group) {
-  const dest = group.bhvr.params.destination; // [x, y]
-  if (!dest) return;
+  const trajectory = group.bhvr.params.trajectory;
+  if (!trajectory) return;
 
-  const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
-  const px = dest[0] * 100;
-  const py = dest[1] * 100;
-  const denom = 5;
-  const size = 100 / denom
+  for (let i = 0; i < trajectory.length; i++) {
+    const dest = trajectory[i];
+    const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
+    const px = dest[0] * 100;
+    const py = dest[1] * 100;
+    const denom = 5;
+    const size = 100 / denom
 
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(px - size, py - size);
-  ctx.lineTo(px + size, py + size);
-  ctx.moveTo(px + size, py - size);
-  ctx.lineTo(px - size, py + size);
-  ctx.stroke();
-  ctx.restore();
+    // Draw cross shape
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(px - size, py - size);
+    ctx.lineTo(px + size, py + size);
+    ctx.moveTo(px + size, py - size);
+    ctx.lineTo(px - size, py + size);
+    ctx.stroke();
+    ctx.restore();
+
+    // Draw index label with a circle background
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.font = '30px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i, px, py - size*2);
+    ctx.restore();
+  }
 }
 
 // Draw a robot with a directional line, index label, and target cross
@@ -310,8 +323,8 @@ function drawStatus() {
       case "move_around":
         behaviorString = "Move Around";
         break;
-      case "form_and_move":
-        behaviorString = "Form & Move (" + group.bhvr.params.formation_shape + ")";
+      case "form_and_follow_trajectory":
+        behaviorString = "Form & Follow Trajectory (" + group.bhvr.params.formation_shape + ")" + " [" + group.bhvr.params.trajectory.join(",") + "]";
         break;
       default:
         behaviorString = "None";

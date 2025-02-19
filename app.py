@@ -59,16 +59,19 @@ def initialize_swarm():
     
     return swarm
 
-# Simulation variables
+# Swarm Initialization
+swarm = initialize_swarm()
+
+# Simulation variables initialization
 simulation_lock = Lock()
 simulation_state = {
     "running": False,
-    "swarm": initialize_swarm(),
-    "current_step": 0
+    "current_step": 0,
+    "swarm": swarm
 }
 
 # Chat variables
-messages = [
+initial_messages = [
     {"role": "ai", "content": "Hello! Welcome to Obedient Swarm.\n"},
     {"role": "ai", "content": "Tell me how to group the drones and what behaviors they should have and I'll do it for you."},
     {"role": "ai", "content": "Example Command 1: I want to group the drones in 4 groups"},
@@ -76,15 +79,21 @@ messages = [
 ]
 
 # Agent Initialization
-agent = SwarmAgent(app, simulation_state["swarm"])
+agent = SwarmAgent(app, swarm)
+
+# Agent variables initialization
+agent_state = {
+    "agent": agent,
+    "messages": initial_messages.copy()
+}
 
 # Send message to the agent
 def send_message(message):
-    messages.append({"role": "user", "content": message})
-    messages.append({"role": "ai", "content": "Waiting for AI response..."})
-    response_content = agent.send_message(message)
-    messages[-1] = {"role": "ai", "content": response_content}
-    
+    agent_state["messages"].append({"role": "user", "content": message})
+    agent_state["messages"].append({"role": "ai", "content": "Waiting for AI response..."})
+    response_content = agent_state["agent"].send_message(message)
+    agent_state["messages"][-1] = {"role": "ai", "content": response_content}
+
 
 # Simulation loop
 def simulation_loop():
@@ -98,7 +107,6 @@ def simulation_loop():
 sim_thread = Thread(target=simulation_loop)
 sim_thread.daemon = True
 sim_thread.start()
-
 
 
 ### API Endpoints ###
@@ -134,6 +142,8 @@ def control():
         if command == 'reset':
             simulation_state["swarm"] = initialize_swarm()
             simulation_state["current_step"] = 0
+            agent_state["agent"] = SwarmAgent(app, simulation_state["swarm"])
+            agent_state["messages"] = initial_messages.copy()
         elif command == 'pause':
             simulation_state["running"] = not simulation_state["running"]
         elif command == 'stop':
@@ -151,7 +161,7 @@ def message():
 @app.route('/chat')
 def chat():
     """Return the current state of the chat"""
-    return jsonify(messages)
+    return jsonify(agent_state["messages"])
 
 @app.route('/')
 def index():

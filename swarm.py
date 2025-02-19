@@ -15,16 +15,18 @@ from typing import Dict, List, Tuple, Any
 import json
 
 # CONSTANTS
+MODEL_NAME = "gpt-4o-mini"
 with open("mykeys/openai_api_key.txt", "r") as f:
     OPENAI_API_KEY = f.read()
 
 # POSSIBLE BEHAVIORS AND PARAMS
 BEHAVIORS = {
-    "form_and_move": {
-        "states": ["form", "rotate", "move"],
+    "form_and_follow_trajectory": {
+        "states": ["form", "follow"],
         "params": {
             "formation_shape": ["circle", "square", "triangle", "hexagon"],
             "formation_radius": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            "trajectory": [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]
         }
     },
     "move_around": {
@@ -157,7 +159,7 @@ class Group:
         behavior_params = behavior_dict['params'] if 'params' in behavior_dict else {}
         behavior_dict["data"] = {}
 
-        if behavior_name == "form_and_move":
+        if behavior_name == "form_and_follow_trajectory":
             # Assign formation positions
             n = len(self.robots)
             formation_pts = compute_formation_positions(n, behavior_params['formation_shape'], behavior_params['formation_radius'])
@@ -174,6 +176,7 @@ class Group:
 
             # Set formation positions in behavior data
             behavior_dict["data"]["formation_positions"] = {int(i): formation_pts[j].tolist() for i, j in zip(robot_idxs, col_ind)}
+            behavior_dict["data"]["traj_index"] = 0
 
             # Initialize behavior state
             behavior_dict["state"] = 0
@@ -190,8 +193,8 @@ class Group:
 
         # Calculate movement based on current behavior
         match bhvr["name"]:
-            # State machine for formation and movement
-            case "form_and_move":
+            # State machine for formation and following trajectory
+            case "form_and_follow_trajectory":
                 match bhvr["state"]:
                     case 0:
                         for robot in self.robots:
@@ -204,24 +207,24 @@ class Group:
                         # Check transition to next state
                         if all(r.is_robot_in_position() for r in self.robots):
                             bhvr["state"] = 1
-                    
+
                     case 1:
                         for robot in self.robots:
                             robot.update_target_angle(
-                                bhvr["params"]["destination"][0] + bhvr["data"]["formation_positions"][robot.idx][0],
-                                bhvr["params"]["destination"][1] + bhvr["data"]["formation_positions"][robot.idx][1]
+                                bhvr["params"]["trajectory"][bhvr["data"]["traj_index"]][0] + bhvr["data"]["formation_positions"][robot.idx][0],
+                                bhvr["params"]["trajectory"][bhvr["data"]["traj_index"]][1] + bhvr["data"]["formation_positions"][robot.idx][1]
                             )
                             robot.move()
-                        
+
                         # Check transition to next state
                         if all(r.is_robot_aligned() for r in self.robots):
                             bhvr["state"] = 2
-
+                    
                     case 2:
                         for robot in self.robots:
                             robot.update_target(
-                                bhvr["params"]["destination"][0] + bhvr["data"]["formation_positions"][robot.idx][0],
-                                bhvr["params"]["destination"][1] + bhvr["data"]["formation_positions"][robot.idx][1]
+                                bhvr["params"]["trajectory"][bhvr["data"]["traj_index"]][0] + bhvr["data"]["formation_positions"][robot.idx][0],
+                                bhvr["params"]["trajectory"][bhvr["data"]["traj_index"]][1] + bhvr["data"]["formation_positions"][robot.idx][1]
                             )
                             robot.move()
 
@@ -230,7 +233,13 @@ class Group:
 
                         # Check transition to next state
                         if all(r.is_robot_in_position() for r in self.robots):
-                            bhvr["state"] = -1
+                            # Check if traj_index is the last index
+                            if bhvr["data"]["traj_index"] == len(bhvr["params"]["trajectory"]) - 1:
+                                bhvr["state"] = -1
+                                bhvr["data"]["traj_index"] = 0
+                            else:
+                                bhvr["state"] = 1
+                                bhvr["data"]["traj_index"] += 1
 
             # State machine for moving around
             case "move_around":
@@ -268,7 +277,8 @@ class Swarm:
         self.groups = []
         self.group_idx_counter = 0
         for robot in self.robots:
-            self.gen_group_by_ids([robot.idx])
+            group = self.gen_group_by_ids([robot.idx])
+
         self.formation_shapes = ['circle', 'square', 'triangle', 'hexagon']
 
     def _get_group_by_idx(self, group_idx):
@@ -282,15 +292,15 @@ class Swarm:
             "name": "move_around",
             "params": {}
         })
-    
-    def assign_form_and_move_behavior_to_group(self, group_idx, formation_shape="circle", formation_radius=1.0, destination=(0, 0)):
-        """Assign form_and_move behavior to a group"""
+
+    def assign_form_and_follow_trajectory_behavior_to_group(self, group_idx, formation_shape="circle", formation_radius=1.0, trajectory=[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]):
+        """Assign form_and_follow_trajectory behavior to a group"""
         self._get_group_by_idx(group_idx).set_behavior({
-            "name": "form_and_move",
+            "name": "form_and_follow_trajectory",
             "params": {
                 "formation_shape": formation_shape,
                 "formation_radius": formation_radius,
-                "destination": destination
+                "trajectory": trajectory
             }
         })
 
@@ -371,41 +381,59 @@ class SwarmAgent:
             self.gen_group_by_ids,
             self.gen_groups_by_clustering,
             self.assign_move_around_behavior_to_group,
-            self.assign_form_and_move_behavior_to_group
+            self.assign_form_and_follow_trajectory_behavior_to_group
         ]
         self.memory = []
-        self.system_prompt = """You are a robot swarm controller. Your job is to help users manage groups of drones and assign them behaviors.
-         
-        Context:   
-        Available robot ids: {robot_idxs}
-        Current group ids: {group_idxs}
+        self.system_prompt = """Your role is to manage drone groups and assign them specific behaviors using the provided tools. Follow these instructions carefully.
 
-        Important coordinates:
+        # Context:
+        Available Robot IDs: {robot_idxs}
+        Current Groups: {groups_str}
+
+        # Important Coordinates:
         Field: (4.5, 2.5)
         Forest: (13.5, 3.5)
         Town: (4.0, 10.0)
         Farm: (17.0, 10.0)
-        River: (10.0, 0) to (10.0, 15.0)
-        Road: (0.0, 10.0) to (20.0, 10.0)
+        River: from (10.0, 0) to (10.0, 15.0)
+        Road: from (0.0, 10.0) to (20.0, 10.0)
         Bridge: (10.0, 10.0)
         Lake: (10.0, 17.5)
 
-        
-        Available tools:
-        1. gen_group_by_ids(group_idx: int, robot_idxs: list[int]) - Create a robot group from a list of robot IDs
-        Example: Group a swarm with 20 robots in groups of exactly 5 robots: 
+        # Available Tools:
+        1. Create a Group by IDs
+        Function: gen_group_by_ids(group_idx: int, robot_idxs: list[int])
+        Description: Creates a robot group from a specific list of robot IDs.
+        Example: To form four groups of 5 robots each from a swarm of 20:
         gen_group_by_ids(1, [0,1,2,3,4])
         gen_group_by_ids(2, [5,6,7,8,9])
         gen_group_by_ids(3, [10,11,12,13,14])
         gen_group_by_ids(4, [15,16,17,18,19])
-        2. gen_groups_by_clustering(num_groups: int) - Cluster drones by proximity in a specified number of groups.
-        Example: Group a swarm with 20 robots in 3 groups using clustering: gen_groups_by_clustering(3)
-        3. assign_move_around_behavior_to_group(group_idx: int) - Assign moving behavior
-        Example: Make the drones in group 1 move around: assign_move_around_behavior_to_group(1)
-        4. assign_form_and_move_behavior_to_group(group_idx, shape, radius, destination) - Formations
-        Example: Make the drones in group 2 move in a square formation of radius 1.0 to (17, 3): assign_form_and_move_behavior_to_group(2, "square", 1.0, (17, 3))
+
+        2. Cluster Drones by Proximity
+        Function: gen_groups_by_clustering(num_groups: int)
+        Description: Clusters drones into the specified number of groups based on proximity.
+        Example: To cluster 20 robots into 3 groups:
+        gen_groups_by_clustering(3)
+
+        3. Assign "Move Around" Behavior
+        Function: assign_move_around_behavior_to_group(group_idx: int)
+        Description: Assigns a moving behavior to the specified group.
+        Example: To make drones in group 1 move around:
+        assign_move_around_behavior_to_group(1)
         
-        Validate parameters before acting. Respond clearly with tool outputs. Ensure all needed function calls are run in the right order."""
+        4. Assign "Form and Follow Trajectory" Behavior
+        Function: assign_form_and_follow_trajectory_behavior_to_group(group_idx: int, formation_shape: str, formation_radius: float, trajectory: list)
+        Description: Directs a group to form a specified formation and follow a trajectory along given waypoints.
+        Example: To have group 2 move in a square formation (radius 1.0) to destination (17, 3):
+        assign_form_and_follow_trajectory_behavior_to_group(2, "square", 1.0, [[17, 3]])
+        Example: To have group 3 move in a square formation (radius 1.0) along the trajectory [(0, 0), (1, 1), (2, 2), (3, 3)]:
+        assign_form_and_follow_trajectory_behavior_to_group(3, "square", 1.0, [[0, 0], [1, 1], [2, 2], [3, 3]])
+        
+        # Guidelines:
+        Validate all parameters before executing any function.
+        Provide clear responses that include outputs from the tools.
+        Execute all required function calls in the correct order."""
         
     def _format_memory(self):
         """Convert memory entries to proper message format"""
@@ -485,7 +513,7 @@ class SwarmAgent:
                 },
                 "required": ["group_idx"]
             }
-        elif func.__name__ == "assign_form_and_move_behavior_to_group":
+        elif func.__name__ == "assign_form_and_follow_trajectory_behavior_to_group":
             return {
                 "type": "object",
                 "properties": {
@@ -499,30 +527,42 @@ class SwarmAgent:
                         "minimum": 0.5,
                         "maximum": 2.0
                     },
-                    "destination": {
+                    "trajectory": {
                         "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 2,
-                        "maxItems": 2
+                        "items": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 10
+                        },
+                        "minItems": 1,
+                        "maxItems": 1
                     }
                 },
-                "required": ["group_idx", "formation_shape", "formation_radius", "destination"]
+                "required": ["group_idx", "formation_shape", "formation_radius", "trajectory"]
             }
         
     def send_message(self, user_input: str):
-        # Build robot_idxs and group_idxs strings
+        # Build current context strings
         robot_idxs = " ,".join(map(str, [robot.idx for robot in self.swarm.robots]))
         group_idxs = " ,".join(map(str, [group.idx for group in self.swarm.groups]))
+        groups_str = ""
+        for group in self.swarm.groups:
+            group_robot_idxs = " ,".join(map(str, [robot.idx for robot in group.robots]))
+            groups_str += f"[{group.idx}: [{group_robot_idxs}], "
+        
         # Build message history with correct structure
+        formatted_system_prompt = self.system_prompt.format(robot_idxs=robot_idxs, groups_str=groups_str)
+        self.app.logger.info(f"Formatted system prompt: {formatted_system_prompt}")
         messages = [
-            {"role": "system", "content": self.system_prompt.format(robot_idxs=robot_idxs, group_idxs=group_idxs)},
+            {"role": "system", "content": formatted_system_prompt},
             *self._format_memory(),
             {"role": "user", "content": user_input}
         ]
 
         # First API call to get initial response
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=MODEL_NAME,
             messages=messages,
             tools=self._get_tool_schemas()
         )
@@ -531,6 +571,23 @@ class SwarmAgent:
         self.memory.append({"role": "user", "content": user_input})
         
         if response_message.tool_calls:
+            
+            # Process tool calls
+            tool_responses = []
+            for tool_call in response_message.tool_calls:
+                self.app.logger.info(f"Processing tool call: {tool_call.function.name}")
+                func = next(t for t in self.tools if t.__name__ == tool_call.function.name)
+                args = json.loads(tool_call.function.arguments)
+                self.app.logger.info(f"Calling {tool_call.function.name} with {args}")
+                result = func(**args)
+                # Store tool response
+                tool_responses.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": tool_call.function.name,
+                    "content": result
+                })
+            
             # Store assistant message with tool calls
             self.memory.append({
                 "role": "assistant",
@@ -547,31 +604,17 @@ class SwarmAgent:
                 ]
             })
             
-            # Process tool calls
-            tool_responses = []
-            for tool_call in response_message.tool_calls:
-                func = next(t for t in self.tools if t.__name__ == tool_call.function.name)
-                args = json.loads(tool_call.function.arguments)
-                self.app.logger.info(f"Calling {tool_call.function.name} with {args}")
-                result = func(**args)
-                # Store tool response
-                tool_responses.append({
-                    "tool_call_id": tool_call.id,
-                    "role": "tool",
-                    "name": tool_call.function.name,
-                    "content": result
-                })
-            
             # Store tool responses
             self.memory.extend(tool_responses)
             
             # Get final response with full context
+            formatted_system_prompt = self.system_prompt.format(robot_idxs=robot_idxs, groups_str=groups_str)
             final_messages = [
-                {"role": "system", "content": self.system_prompt},
+                {"role": "system", "content": formatted_system_prompt},
                 *self._format_memory()
             ]
             final_response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=MODEL_NAME,
                 messages=final_messages
             )
             ai_message = final_response.choices[0].message.content
@@ -603,23 +646,23 @@ class SwarmAgent:
     def assign_move_around_behavior_to_group(self, group_idx: int):
         self.swarm.assign_move_around_behavior_to_group(group_idx)
         return f"move_around behavior assigned to group {group_idx}"
-
-    def assign_form_and_move_behavior_to_group(self, group_idx: int, 
-                                             formation_shape: str, 
-                                             formation_radius: float, 
-                                             destination: Tuple[float, float]):
+    
+    def assign_form_and_follow_trajectory_behavior_to_group(self, group_idx: int,
+                                                            formation_shape: str,
+                                                            formation_radius: float,
+                                                            trajectory: List[Tuple[float, float]]): 
         # Validation logic
         if formation_radius < 0.5 or formation_radius > 2.0:
             return "Invalid radius value"
         if formation_shape not in ["circle", "square", "triangle", "hexagon"]:
             return "Invalid formation shape"
-        if any(coord < 0 or coord > 20 for coord in destination):
-            return "Invalid destination coordinates"
+        if len(trajectory) < 1 or any(len(pos) != 2 for pos in trajectory):
+            return "Invalid trajectory"
         
-        self.swarm.assign_form_and_move_behavior_to_group(
-            group_idx, formation_shape, formation_radius, destination
+        self.swarm.assign_form_and_follow_trajectory_behavior_to_group(
+            group_idx, formation_shape, formation_radius, trajectory
         )
-        return f"form_and_move behavior assigned to group {group_idx} with formation shape {formation_shape}, radius {formation_radius}, and destination {destination}"
+        return f"form_and_follow_trajectory behavior assigned to group {group_idx} with formation shape {formation_shape}, radius {formation_radius}, and trajectory {trajectory}"
 
 
 # AUXILIARY FUNCTIONS
