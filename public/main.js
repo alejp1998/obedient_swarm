@@ -124,7 +124,7 @@ function drawGrid() {
 function drawFormation(group) {
   const { formation_shape, formation_radius } = group.bhvr.params;
   const center = group.virtual_center;
-  const color = group.robots.length > 1 ? COLORS[group.idx] : '#000';
+  const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
   const cx = center[0] * 100;
   const cy = center[1] * 100;
 
@@ -226,7 +226,7 @@ function drawDestination(group) {
   const dest = group.bhvr.params.destination; // [x, y]
   if (!dest) return;
 
-  const color = group.robots.length > 1 ? COLORS[group.idx] : '#000';
+  const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
   const px = dest[0] * 100;
   const py = dest[1] * 100;
   const denom = 5;
@@ -318,8 +318,8 @@ function drawStatus() {
     }
 
     const robotsInGroup = Array.from(group.robots).map(robot => robot.idx).join(',');
-    const statusText = `G${idx} [${robotsInGroup}] -> ${behaviorString}`;
-    const color = group.robots.length > 1 ? COLORS[group.idx] : '#000';
+    const statusText = `G${group.idx} [${robotsInGroup}] -> ${behaviorString}`;
+    const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
     ctx.fillStyle = color;
     ctx.fillText(statusText, 10, yOffset);
     yOffset += 30;
@@ -336,7 +336,7 @@ function updateDisplay() {
     // drawFormation(group);
     drawDestination(group);
     group.robots.forEach(robot => {
-      const color = group.robots.length > 1 ? COLORS[group.idx] : '#000';
+      const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
       drawRobot(robot, color);
     });
   });
@@ -346,7 +346,7 @@ function updateDisplay() {
 // -------------------- Expandable Tree View Functions --------------------
 const nodeStates = {};
 const elementMap = new Map();
-const defaultState = "collapsed";
+const defaultState = "expanded";
 
 function reconcileTree(parentEl, data, parentPath = "") {
   const existingNodes = new Map();
@@ -467,6 +467,19 @@ function updateTreeView(data) {
 
 
 // -------------------- Chat Functionality --------------------
+
+async function sendMessage(message) {
+  try {
+    await fetch('/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+  } catch (err) {
+    console.error("Message error:", err);
+  }
+}
+
 function sendChat() {
   const chatInput = document.getElementById("chatMessage");
   const chatLog = document.getElementById("chatLog");
@@ -479,29 +492,33 @@ function sendChat() {
     chatLog.appendChild(userMessage);
     chatInput.value = "";
 
-    // Append the AI response to the chat log
-    const aiMessage = document.createElement("div");
-    aiMessage.classList.add("chat-message", "ai-message");
-    aiMessage.textContent = "Waiting for AI response...";
-    chatLog.appendChild(aiMessage);
-
     // Scroll to the bottom of the chat log
     chatLog.scrollTop = chatLog.scrollHeight;
     
     // Send the message to the server
-    sendCommand('chat', message);
+    sendMessage(message);
   }
 }
 
+chatData = [];
 function fetchChat() {
   fetch('/chat')
     .then(response => response.json())
     .then(data => {
+      // Check if chat data has changed
+      if (JSON.stringify(data) === JSON.stringify(chatData)) {
+        return;
+      }
+
+      // Update chat data
+      chatData = data;
+
+      // Update the chat log html
       const chatLog = document.getElementById("chatLog");
       // Clear the chat log
       chatLog.innerHTML = "";
       // Append messages to the chat log
-      data.messages.forEach(message => {
+      data.forEach(message => {
         if (message.role === "user") {
           const userMessage = document.createElement("div");
           userMessage.classList.add("chat-message", "user-message");
@@ -513,6 +530,9 @@ function fetchChat() {
           aiMessage.textContent = message.content;
           chatLog.appendChild(aiMessage);
         }
+
+        // Scroll to the bottom of the chat log
+        chatLog.scrollTop = chatLog.scrollHeight;
       });
     })
     .catch(error => console.error("Error fetching chat:", error));
@@ -523,6 +543,9 @@ async function fetchState() {
   // Get current timestamp
   const start_time = Date.now();
   try {
+    // Fetch current chat
+    fetchChat();
+
     // Fetch current state
     const response = await fetch('/state');
     simData = await response.json();

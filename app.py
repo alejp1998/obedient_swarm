@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 # Import Swarm and Robot classes
-from swarm import Swarm, Robot
+from swarm import SwarmAgent, Swarm, Robot
 
 # Create the Flask application
 app = Flask(__name__)
@@ -23,30 +23,22 @@ class NoSuccessFilter(logging.Filter):
 
 log.addFilter(NoSuccessFilter())
 
-# Simulation variables
-simulation_lock = Lock()
-simulation_state = {
-    "running": False,
-    "swarm": None,
-    "current_step": 0
-}
-
 # SIMULATION ENV
 ARENA_WIDTH = 20
 ARENA_HEIGHT = 20
 FORMATION_RADIUS = 2
 
-# CONSTANTS
-NUMBER_OF_ROBOTS = 30
+# SIMULATION SETTINGS
+NUMBER_OF_ROBOTS = 20
 NUMBER_OF_GROUPS = 3
 MAX_SPEED = 0.05
 FORMATION_SHAPES = ['circle', 'square', 'triangle', 'hexagon']
 FIELD_START_X = 1
 FIELD_START_Y = 0
-FIELD_WIDTH = 5
-FIELD_HEIGHT = 2
+FIELD_WIDTH = 7
+FIELD_HEIGHT = 5
 
-# Initialize robot positions with some distance from the edge
+# Simulation functions
 def initialize_robot_positions(n, x_min=0, y_min=0, x_max=ARENA_WIDTH, y_max=ARENA_HEIGHT, distance_from_edge=FORMATION_RADIUS):
     x = np.random.uniform(x_min + distance_from_edge, x_max - distance_from_edge, n)
     y = np.random.uniform(y_min + distance_from_edge, y_max - distance_from_edge, n)
@@ -59,35 +51,40 @@ def initialize_destinations(n):
     return x, y
 
 # Initialize the swarm
-def initialize_swarm(reset=False):
-    if reset:
-        swarm = simulation_state["swarm"]
-        swarm.gen_groups_by_clustering(NUMBER_OF_GROUPS)
-        dest_x, dest_y = initialize_destinations(NUMBER_OF_GROUPS)
-        for group in swarm.groups:
-            group.set_behavior({
-                "name": "form_and_move",
-                "params": {
-                    "formation_shape": random.choice(FORMATION_SHAPES),
-                    "formation_radius": random.uniform(0.5, 1.0),
-                    "destination": (dest_x[group.idx], dest_y[group.idx])
-                }
-            })
-    else:
-        x, y = initialize_robot_positions(NUMBER_OF_ROBOTS, FIELD_START_X, FIELD_START_Y, 
-                                        FIELD_START_X + FIELD_WIDTH, FIELD_START_Y + FIELD_HEIGHT)
-        dest_x, dest_y = initialize_destinations(NUMBER_OF_GROUPS)
-        robots = [Robot(idx, x, y) for idx, (x, y) in enumerate(zip(x, y))]
-        swarm = Swarm(robots)
-        for group in swarm.groups:
-            group.set_behavior({
-                "name": "move_around",
-                "params": {}
-            })
+def initialize_swarm():
+    x, y = initialize_robot_positions(NUMBER_OF_ROBOTS, FIELD_START_X, FIELD_START_Y, 
+                                    FIELD_START_X + FIELD_WIDTH, FIELD_START_Y + FIELD_HEIGHT)
+    robots = [Robot(idx, x, y) for idx, (x, y) in enumerate(zip(x, y))]
+    swarm = Swarm(robots)
     
     return swarm
 
-simulation_state["swarm"] = initialize_swarm()
+# Simulation variables
+simulation_lock = Lock()
+simulation_state = {
+    "running": False,
+    "swarm": initialize_swarm(),
+    "current_step": 0
+}
+
+# Chat variables
+messages = [
+    {"role": "ai", "content": "Hello! Welcome to Obedient Swarm.\n"},
+    {"role": "ai", "content": "Tell me how to group the drones and what behaviors they should have and I'll do it for you."},
+    {"role": "ai", "content": "Example Command 1: I want to group the drones in 4 groups"},
+    {"role": "ai", "content": "Example Command 2: Group 1 should form in a circle of radius 1.0 and move towards the lake"},
+]
+
+# Agent Initialization
+agent = SwarmAgent(app, simulation_state["swarm"])
+
+# Send message to the agent
+def send_message(message):
+    messages.append({"role": "user", "content": message})
+    messages.append({"role": "ai", "content": "Waiting for AI response..."})
+    response_content = agent.send_message(message)
+    messages[-1] = {"role": "ai", "content": response_content}
+    
 
 # Simulation loop
 def simulation_loop():
@@ -101,6 +98,8 @@ def simulation_loop():
 sim_thread = Thread(target=simulation_loop)
 sim_thread.daemon = True
 sim_thread.start()
+
+
 
 ### API Endpoints ###
 
@@ -133,7 +132,7 @@ def control():
     command = request.json.get('command')
     with simulation_lock:
         if command == 'reset':
-            simulation_state["swarm"] = initialize_swarm(reset=True)
+            simulation_state["swarm"] = initialize_swarm()
             simulation_state["current_step"] = 0
         elif command == 'pause':
             simulation_state["running"] = not simulation_state["running"]
@@ -141,11 +140,18 @@ def control():
             print("Stopping simulation - What should we do here?")
     return jsonify({"status": "ok"})
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    """Handle chat messages from the client"""
-    message = request.json.get('message')
+@app.route('/message', methods=['POST'])
+def message():
+    """Handle a new user message"""
+    user_message = request.json.get('message')
+    app.logger.info(f"User message: {user_message}")
+    send_message(user_message)
     return jsonify({"status": "ok"})
+
+@app.route('/chat')
+def chat():
+    """Return the current state of the chat"""
+    return jsonify(messages)
 
 @app.route('/')
 def index():

@@ -10,6 +10,14 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import KMeans, DBSCAN
 
+from openai import OpenAI
+from typing import Dict, List, Tuple, Any
+import json
+
+# CONSTANTS
+with open("mykeys/openai_api_key.txt", "r") as f:
+    OPENAI_API_KEY = f.read()
+
 # POSSIBLE BEHAVIORS AND PARAMS
 BEHAVIORS = {
     "form_and_move": {
@@ -24,6 +32,11 @@ BEHAVIORS = {
         "params": {}
     }
 }
+
+# CLIENT
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+### CLASSES ###
 
 class Robot:
     """
@@ -177,6 +190,7 @@ class Group:
 
         # Calculate movement based on current behavior
         match bhvr["name"]:
+            # State machine for formation and movement
             case "form_and_move":
                 match bhvr["state"]:
                     case 0:
@@ -218,6 +232,7 @@ class Group:
                         if all(r.is_robot_in_position() for r in self.robots):
                             bhvr["state"] = -1
 
+            # State machine for moving around
             case "move_around":
                 for robot in self.robots:
                     # If they havent reached their target, move them
@@ -248,10 +263,64 @@ class Swarm:
         
         Args:
             robots (list[Robot]): List of robots in the swarm
-        """
+        """  
         self.robots = robots
-        self.groups = [Group(i, [robots[i]]) for i in range(len(robots))]
+        self.groups = []
+        self.group_idx_counter = 0
+        for robot in self.robots:
+            self.gen_group_by_ids([robot.idx])
         self.formation_shapes = ['circle', 'square', 'triangle', 'hexagon']
+
+    def _get_group_by_idx(self, group_idx):
+        """Get group by idx value. Find the group in the groups list with idx = group_idx"""
+        groups = [group for group in self.groups if group.idx == group_idx]
+        return groups[0]
+    
+    def assign_move_around_behavior_to_group(self, group_idx):
+        """Assign move_around behavior to a group"""
+        self._get_group_by_idx(group_idx).set_behavior({
+            "name": "move_around",
+            "params": {}
+        })
+    
+    def assign_form_and_move_behavior_to_group(self, group_idx, formation_shape="circle", formation_radius=1.0, destination=(0, 0)):
+        """Assign form_and_move behavior to a group"""
+        self._get_group_by_idx(group_idx).set_behavior({
+            "name": "form_and_move",
+            "params": {
+                "formation_shape": formation_shape,
+                "formation_radius": formation_radius,
+                "destination": destination
+            }
+        })
+
+    def gen_group_by_ids(self, robot_idxs):
+        """
+        Generate group based on robot IDs. 
+        If the group is already assigned, it will be overwritten. 
+        If the robots are assigned to a different group, they will be moved to the new group and removed from the old group.
+
+        Args:
+            robot_idxs (list[int]): List of robot IDs
+        """
+        # Iterate over the groups to see if they have any of the robots
+        for i, group in enumerate(self.groups):
+            if any(robot.idx in robot_idxs for robot in group.robots):
+                # Remove robots from the old group
+                self.groups[i].robots = [robot for robot in self.groups[i].robots if robot.idx not in robot_idxs]
+        
+        # Remove empty groups
+        self.groups = [group for group in self.groups if group.robots]
+
+        # Create the new group
+        new_group = Group(self.group_idx_counter, [self.robots[i] for i in robot_idxs])
+        self.group_idx_counter += 1
+
+        # Add the new group
+        self.groups.append(new_group)
+
+        return new_group
+
 
     def gen_groups_by_lists_of_ids(self, lists_of_ids):
         """
@@ -260,7 +329,9 @@ class Swarm:
         Args:
             lists_of_ids (list[list[int]]): List of lists of robot IDs
         """
-        self.groups = [Group(i, [self.robots[i] for i in ids]) for i, ids in enumerate(lists_of_ids)]
+        self.groups = []
+        for robot_ids in lists_of_ids:
+            self.gen_group_by_ids(robot_ids)
 
     def gen_groups_by_clustering(self, num_groups):
         """
@@ -278,16 +349,8 @@ class Swarm:
         groups = []
         for group_idx in range(num_groups):
             robot_indices = np.where(kmeans.labels_ == group_idx)[0]
-            group_robots = [self.robots[i] for i in robot_indices]
-            group = Group(group_idx, group_robots)
-            group.set_behavior({
-                "name": "form_and_move",
-                "params": {
-                    "formation_shape": random.choice(self.formation_shapes),
-                    "formation_radius": random.uniform(0.5, 3.0),
-                    "destination": (random.uniform(0, 8), random.uniform(0, 8))
-                }
-            })
+            group_robot_idxs = [self.robots[i].idx for i in robot_indices]
+            group = self.gen_group_by_ids(group_robot_idxs)
             groups.append(group)
             
         self.groups = groups
@@ -299,6 +362,264 @@ class Swarm:
                 continue
                 
             group.step()
+
+class SwarmAgent:
+    def __init__(self, app, swarm: Swarm):
+        self.app = app
+        self.swarm = swarm
+        self.tools = [
+            self.gen_group_by_ids,
+            self.gen_groups_by_clustering,
+            self.assign_move_around_behavior_to_group,
+            self.assign_form_and_move_behavior_to_group
+        ]
+        self.memory = []
+        self.system_prompt = """You are a robot swarm controller. Your job is to help users manage groups of drones and assign them behaviors.
+         
+        Context:   
+        Available robot ids: {robot_idxs}
+        Current group ids: {group_idxs}
+
+        Important coordinates:
+        Field: (4.5, 2.5)
+        Forest: (13.5, 3.5)
+        Town: (4.0, 10.0)
+        Farm: (17.0, 10.0)
+        River: (10.0, 0) to (10.0, 15.0)
+        Road: (0.0, 10.0) to (20.0, 10.0)
+        Bridge: (10.0, 10.0)
+        Lake: (10.0, 17.5)
+
+        
+        Available tools:
+        1. gen_group_by_ids(group_idx: int, robot_idxs: list[int]) - Create a robot group from a list of robot IDs
+        Example: Group a swarm with 20 robots in groups of exactly 5 robots: 
+        gen_group_by_ids(1, [0,1,2,3,4])
+        gen_group_by_ids(2, [5,6,7,8,9])
+        gen_group_by_ids(3, [10,11,12,13,14])
+        gen_group_by_ids(4, [15,16,17,18,19])
+        2. gen_groups_by_clustering(num_groups: int) - Cluster drones by proximity in a specified number of groups.
+        Example: Group a swarm with 20 robots in 3 groups using clustering: gen_groups_by_clustering(3)
+        3. assign_move_around_behavior_to_group(group_idx: int) - Assign moving behavior
+        Example: Make the drones in group 1 move around: assign_move_around_behavior_to_group(1)
+        4. assign_form_and_move_behavior_to_group(group_idx, shape, radius, destination) - Formations
+        Example: Make the drones in group 2 move in a square formation of radius 1.0 to (17, 3): assign_form_and_move_behavior_to_group(2, "square", 1.0, (17, 3))
+        
+        Validate parameters before acting. Respond clearly with tool outputs. Ensure all needed function calls are run in the right order."""
+        
+    def _format_memory(self):
+        """Convert memory entries to proper message format"""
+        formatted = []
+        for entry in self.memory:
+            if "tool_call_id" in entry:
+                formatted.append({
+                    "role": entry["role"],
+                    "content": entry["content"],
+                    "tool_call_id": entry["tool_call_id"]
+                })
+            elif "tool_calls" in entry:
+                formatted.append({
+                    "role": entry["role"],
+                    "content": entry["content"],
+                    "tool_calls": entry["tool_calls"]
+                })
+            else:
+                formatted.append({
+                    "role": entry["role"],
+                    "content": entry["content"]
+                })
+        return formatted
+    
+    def _get_tool_schemas(self):
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.__name__,
+                    "description": tool.__doc__,
+                    "parameters": self._get_params_schema(tool)
+                }
+            } for tool in self.tools
+        ]
+    
+    def _get_params_schema(self, func):
+        # Implement parameter schema extraction based on func annotations
+        if func.__name__ == "gen_group_by_ids":
+            return {
+                "type": "object",
+                "properties": {
+                    "robot_idxs": {
+                        "type": "array",
+                        "items": {"type": "integer"}
+                    }
+                },
+                "required": ["robot_idxs"]
+            }
+        # if func.__name__ == "gen_groups_by_lists_of_ids":
+        #     return {
+        #         "type": "object",
+        #         "properties": {
+        #             "lists_of_ids": {
+        #                 "type": "array",
+        #                 "items": {
+        #                     "type": "array",
+        #                     "items": {"type": "integer"}
+        #                 }
+        #             }    
+        #         },  
+        #         "required": ["lists_of_ids"]
+        #     }
+        elif func.__name__ == "gen_groups_by_clustering":
+            return {
+                "type": "object",
+                "properties": {
+                    "num_groups": {"type": "integer"}
+                },
+                "required": ["num_groups"]
+            }
+        elif func.__name__ == "assign_move_around_behavior_to_group":
+            return {
+                "type": "object",
+                "properties": {
+                    "group_idx": {"type": "integer"}
+                },
+                "required": ["group_idx"]
+            }
+        elif func.__name__ == "assign_form_and_move_behavior_to_group":
+            return {
+                "type": "object",
+                "properties": {
+                    "group_idx": {"type": "integer"},
+                    "formation_shape": {
+                        "type": "string", 
+                        "enum": ["circle", "square", "triangle", "hexagon"]
+                    },
+                    "formation_radius": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 2.0
+                    },
+                    "destination": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2
+                    }
+                },
+                "required": ["group_idx", "formation_shape", "formation_radius", "destination"]
+            }
+        
+    def send_message(self, user_input: str):
+        # Build robot_idxs and group_idxs strings
+        robot_idxs = " ,".join(map(str, [robot.idx for robot in self.swarm.robots]))
+        group_idxs = " ,".join(map(str, [group.idx for group in self.swarm.groups]))
+        # Build message history with correct structure
+        messages = [
+            {"role": "system", "content": self.system_prompt.format(robot_idxs=robot_idxs, group_idxs=group_idxs)},
+            *self._format_memory(),
+            {"role": "user", "content": user_input}
+        ]
+
+        # First API call to get initial response
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            tools=self._get_tool_schemas()
+        )
+        
+        response_message = response.choices[0].message
+        self.memory.append({"role": "user", "content": user_input})
+        
+        if response_message.tool_calls:
+            # Store assistant message with tool calls
+            self.memory.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": call.function.arguments
+                        }
+                    } for call in response_message.tool_calls
+                ]
+            })
+            
+            # Process tool calls
+            tool_responses = []
+            for tool_call in response_message.tool_calls:
+                func = next(t for t in self.tools if t.__name__ == tool_call.function.name)
+                args = json.loads(tool_call.function.arguments)
+                self.app.logger.info(f"Calling {tool_call.function.name} with {args}")
+                result = func(**args)
+                # Store tool response
+                tool_responses.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": tool_call.function.name,
+                    "content": result
+                })
+            
+            # Store tool responses
+            self.memory.extend(tool_responses)
+            
+            # Get final response with full context
+            final_messages = [
+                {"role": "system", "content": self.system_prompt},
+                *self._format_memory()
+            ]
+            final_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=final_messages
+            )
+            ai_message = final_response.choices[0].message.content
+            self.memory.append({"role": "assistant", "content": ai_message})
+            self.app.logger.info(f"Response after calls: {ai_message}")
+            return ai_message
+        else:
+            self.memory.append({"role": "assistant", "content": response_message.content})
+            self.app.logger.info(f"Response without calls: {response_message.content}")
+            return response_message.content
+
+    # Tool implementations
+    def gen_group_by_ids(self, robot_idxs: List[int]):
+        new_group = self.swarm.gen_group_by_ids(robot_idxs)
+        return f"Drones {', '.join(map(str, robot_idxs))} grouped successfully in group {new_group.idx}"
+
+    # def gen_groups_by_lists_of_ids(self, lists_of_ids: List[List[int]]):
+    #     if len(lists_of_ids) < 1:
+    #         return "Invalid number of groups"
+    #     self.swarm.gen_groups_by_lists_of_ids(lists_of_ids)
+    #     return f"Drones grouped successfully in {len(lists_of_ids)} groups"
+
+    def gen_groups_by_clustering(self, num_groups: int):
+        if num_groups < 0 or num_groups > len(self.swarm.robots):
+            return "Invalid number of groups"
+        self.swarm.gen_groups_by_clustering(num_groups)
+        return f"Drones grouped successfully in {num_groups} groups"
+
+    def assign_move_around_behavior_to_group(self, group_idx: int):
+        self.swarm.assign_move_around_behavior_to_group(group_idx)
+        return f"move_around behavior assigned to group {group_idx}"
+
+    def assign_form_and_move_behavior_to_group(self, group_idx: int, 
+                                             formation_shape: str, 
+                                             formation_radius: float, 
+                                             destination: Tuple[float, float]):
+        # Validation logic
+        if formation_radius < 0.5 or formation_radius > 2.0:
+            return "Invalid radius value"
+        if formation_shape not in ["circle", "square", "triangle", "hexagon"]:
+            return "Invalid formation shape"
+        if any(coord < 0 or coord > 20 for coord in destination):
+            return "Invalid destination coordinates"
+        
+        self.swarm.assign_form_and_move_behavior_to_group(
+            group_idx, formation_shape, formation_radius, destination
+        )
+        return f"form_and_move behavior assigned to group {group_idx} with formation shape {formation_shape}, radius {formation_radius}, and destination {destination}"
 
 
 # AUXILIARY FUNCTIONS
