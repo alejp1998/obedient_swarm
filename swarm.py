@@ -331,7 +331,6 @@ class Swarm:
 
         return new_group
 
-
     def gen_groups_by_lists_of_ids(self, lists_of_ids):
         """
         Generate groups based on lists of robot IDs
@@ -387,8 +386,8 @@ class SwarmAgent:
         self.system_prompt = """Your role is to manage drone groups and assign them specific behaviors using the provided tools. Follow these instructions carefully.
 
         # Context:
-        Available Robot IDs: {robot_idxs}
-        Current Groups: {groups_str}
+        Available Robot IDs [robot_idxs]: {robot_idxs}
+        Current Groups [{{group_idx: [robot_idxs]}}, ...]: {groups_str}
 
         # Important Coordinates:
         Field: (4.5, 2.5)
@@ -402,13 +401,13 @@ class SwarmAgent:
 
         # Available Tools:
         1. Create a Group by IDs
-        Function: gen_group_by_ids(group_idx: int, robot_idxs: list[int])
+        Function: gen_group_by_ids(robot_idxs: list[int])
         Description: Creates a robot group from a specific list of robot IDs.
         Example: To form four groups of 5 robots each from a swarm of 20:
-        gen_group_by_ids(1, [0,1,2,3,4])
-        gen_group_by_ids(2, [5,6,7,8,9])
-        gen_group_by_ids(3, [10,11,12,13,14])
-        gen_group_by_ids(4, [15,16,17,18,19])
+        gen_group_by_ids([0,1,2,3,4])
+        gen_group_by_ids([5,6,7,8,9])
+        gen_group_by_ids([10,11,12,13,14])
+        gen_group_by_ids([15,16,17,18,19])
 
         2. Cluster Drones by Proximity
         Function: gen_groups_by_clustering(num_groups: int)
@@ -418,22 +417,24 @@ class SwarmAgent:
 
         3. Assign "Move Around" Behavior
         Function: assign_move_around_behavior_to_group(group_idx: int)
-        Description: Assigns a moving behavior to the specified group.
+        Description: Assigns a random movement behavior to the drones in the specified group.
         Example: To make drones in group 1 move around:
         assign_move_around_behavior_to_group(1)
         
         4. Assign "Form and Follow Trajectory" Behavior
         Function: assign_form_and_follow_trajectory_behavior_to_group(group_idx: int, formation_shape: str, formation_radius: float, trajectory: list)
-        Description: Directs a group to form a specified formation and follow a trajectory along given waypoints.
-        Example: To have group 2 move in a square formation (radius 1.0) to destination (17, 3):
+        Description: Directs a group to form a specified formation and follow a trajectory along given waypoints. If you are just asked to move a group to a destination, call the function with one waypoint in the trajectory.
+        Example 1: To have group 2 move in a square formation (radius 1.0) to destination (17, 3):
         assign_form_and_follow_trajectory_behavior_to_group(2, "square", 1.0, [[17, 3]])
-        Example: To have group 3 move in a square formation (radius 1.0) along the trajectory [(0, 0), (1, 1), (2, 2), (3, 3)]:
+        Example 2: To have group 3 move in a square formation (radius 1.0) along the trajectory [(0, 0), (1, 1), (2, 2), (3, 3)]:
         assign_form_and_follow_trajectory_behavior_to_group(3, "square", 1.0, [[0, 0], [1, 1], [2, 2], [3, 3]])
         
         # Guidelines:
         Validate all parameters before executing any function.
-        Provide clear responses that include outputs from the tools.
-        Execute all required function calls in the correct order."""
+        Provide clear responses that include outputs from the tools. 
+        Do not finish messages with "if there is anything else I can help you with" or "what else can I do for you", be concise and to the point. 
+        Execute all required function calls in the correct order.
+        Do not combine calls to grouping and movement functions, call grouping functions first and then ask the user for permission to move the group."""
         
     def _format_memory(self):
         """Convert memory entries to proper message format"""
@@ -483,20 +484,6 @@ class SwarmAgent:
                 },
                 "required": ["robot_idxs"]
             }
-        # if func.__name__ == "gen_groups_by_lists_of_ids":
-        #     return {
-        #         "type": "object",
-        #         "properties": {
-        #             "lists_of_ids": {
-        #                 "type": "array",
-        #                 "items": {
-        #                     "type": "array",
-        #                     "items": {"type": "integer"}
-        #                 }
-        #             }    
-        #         },  
-        #         "required": ["lists_of_ids"]
-        #     }
         elif func.__name__ == "gen_groups_by_clustering":
             return {
                 "type": "object",
@@ -553,89 +540,88 @@ class SwarmAgent:
         
         # Build message history with correct structure
         formatted_system_prompt = self.system_prompt.format(robot_idxs=robot_idxs, groups_str=groups_str)
-        self.app.logger.info(f"Formatted system prompt: {formatted_system_prompt}")
+        # self.app.logger.info(f"Formatted system prompt: {formatted_system_prompt}")
         messages = [
             {"role": "system", "content": formatted_system_prompt},
             *self._format_memory(),
             {"role": "user", "content": user_input}
         ]
 
-        # First API call to get initial response
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            tools=self._get_tool_schemas()
-        )
-        
-        response_message = response.choices[0].message
-        self.memory.append({"role": "user", "content": user_input})
-        
-        if response_message.tool_calls:
-            
-            # Process tool calls
-            tool_responses = []
-            for tool_call in response_message.tool_calls:
-                self.app.logger.info(f"Processing tool call: {tool_call.function.name}")
-                func = next(t for t in self.tools if t.__name__ == tool_call.function.name)
-                args = json.loads(tool_call.function.arguments)
-                self.app.logger.info(f"Calling {tool_call.function.name} with {args}")
-                result = func(**args)
-                # Store tool response
-                tool_responses.append({
-                    "tool_call_id": tool_call.id,
-                    "role": "tool",
-                    "name": tool_call.function.name,
-                    "content": result
-                })
-            
-            # Store assistant message with tool calls
-            self.memory.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": call.id,
-                        "type": "function",
-                        "function": {
-                            "name": call.function.name,
-                            "arguments": call.function.arguments
-                        }
-                    } for call in response_message.tool_calls
-                ]
-            })
-            
-            # Store tool responses
-            self.memory.extend(tool_responses)
-            
-            # Get final response with full context
-            formatted_system_prompt = self.system_prompt.format(robot_idxs=robot_idxs, groups_str=groups_str)
-            final_messages = [
-                {"role": "system", "content": formatted_system_prompt},
-                *self._format_memory()
-            ]
-            final_response = client.chat.completions.create(
+        try :
+            # First API call to get initial response
+            response = client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=final_messages
+                messages=messages,
+                tools=self._get_tool_schemas()
             )
-            ai_message = final_response.choices[0].message.content
-            self.memory.append({"role": "assistant", "content": ai_message})
-            self.app.logger.info(f"Response after calls: {ai_message}")
-            return ai_message
-        else:
-            self.memory.append({"role": "assistant", "content": response_message.content})
-            self.app.logger.info(f"Response without calls: {response_message.content}")
-            return response_message.content
+            
+            response_message = response.choices[0].message
+            self.memory.append({"role": "user", "content": user_input})
+            
+            if response_message.tool_calls:
+                
+                # Process tool calls
+                tool_responses = []
+                for tool_call in response_message.tool_calls:
+                    self.app.logger.info(f"Processing tool call: {tool_call.function.name}")
+                    func = next(t for t in self.tools if t.__name__ == tool_call.function.name)
+                    args = json.loads(tool_call.function.arguments)
+                    self.app.logger.info(f"Calling {tool_call.function.name} with {args}")
+                    result = func(**args)
+                    # Store tool response
+                    tool_responses.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": tool_call.function.name,
+                        "content": result
+                    })
+                
+                # Store assistant message with tool calls
+                self.memory.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": call.id,
+                            "type": "function",
+                            "function": {
+                                "name": call.function.name,
+                                "arguments": call.function.arguments
+                            }
+                        } for call in response_message.tool_calls
+                    ]
+                })
+                
+                # Store tool responses
+                self.memory.extend(tool_responses)
+                
+                # Get final response with full context
+                formatted_system_prompt = self.system_prompt.format(robot_idxs=robot_idxs, groups_str=groups_str)
+                final_messages = [
+                    {"role": "system", "content": formatted_system_prompt},
+                    *self._format_memory()
+                ]
+                final_response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=final_messages
+                )
+                ai_message = final_response.choices[0].message.content
+                self.memory.append({"role": "assistant", "content": ai_message})
+                self.app.logger.info(f"Response after calls: {ai_message}")
+                return ai_message
+            else:
+                self.memory.append({"role": "assistant", "content": response_message.content})
+                self.app.logger.info(f"Response without calls: {response_message.content}")
+                return response_message.content
+        
+        except Exception as e:
+            self.app.logger.error(f"Error: {e}")
+            return "There was an error processing your request. Please try clarifying your request."
 
     # Tool implementations
     def gen_group_by_ids(self, robot_idxs: List[int]):
         new_group = self.swarm.gen_group_by_ids(robot_idxs)
         return f"Drones {', '.join(map(str, robot_idxs))} grouped successfully in group {new_group.idx}"
-
-    # def gen_groups_by_lists_of_ids(self, lists_of_ids: List[List[int]]):
-    #     if len(lists_of_ids) < 1:
-    #         return "Invalid number of groups"
-    #     self.swarm.gen_groups_by_lists_of_ids(lists_of_ids)
-    #     return f"Drones grouped successfully in {len(lists_of_ids)} groups"
 
     def gen_groups_by_clustering(self, num_groups: int):
         if num_groups < 0 or num_groups > len(self.swarm.robots):

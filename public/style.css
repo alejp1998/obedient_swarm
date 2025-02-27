@@ -1,7 +1,7 @@
 :root {
   --primary-accent: #6366f1;
-  --chat-user-bg: #4f46e5;
-  --chat-ai-bg: #374151;
+  --chat-user-bg: #4038df;
+  --chat-ai-bg: #eeeeee;
 }
 
 /* Canvas Section */
@@ -62,12 +62,16 @@
 }
 
 /* Chat Interface */
-#controlPanel {
+#chatPanel {
   height: 90vh;
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 #chatLog {
-  height: 80vh;
+  height: 78vh;
   background: white;
   border-radius: 8px;
   padding: 1rem;
@@ -78,11 +82,39 @@
 }
 
 .chat-message {
-  max-width: 80%;
-  padding: 0.75rem 1rem;
+  max-width: 85%;
+  padding: 0.5rem 1rem;
   border-radius: 12px;
   font-size: 0.9rem;
 }
+
+.chat-message ol{
+  padding-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.chat-message h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.chat-message h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.chat-message h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.chat-message p {
+  margin-bottom: 0.5rem;
+}
+
 
 .user-message {
   background: var(--chat-user-bg);
@@ -93,19 +125,12 @@
 
 .ai-message {
   background: var(--chat-ai-bg);
-  color: white;
+  color: black;
   align-self: flex-start;
   border-bottom-left-radius: 4px;
 }
 
-/* Control Panel */
-#controlPanel {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
+/* Button Animation */
 .button {
   transition: transform 0.1s ease;
 }

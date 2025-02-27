@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
 
+  <!-- Marked.js for markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
   <!-- DM Sans font import -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=DM+Sans" />
 
@@ -42,10 +45,6 @@
               <span class="icon"><i class="fas fa-redo"></i></span>
               <span class="text">Reset</span>
             </button>
-            <button id="stop-button" class="button is-danger" disabled>
-              <span class="icon"><i class="fas fa-stop"></i></span>
-              <span class="text">Stop</span>
-            </button>
           </div>
           <span id="stepCounter" class="tag is-primary is-light is-large" style="min-width: 180px;">Step: 0</span>
         </div>
@@ -57,18 +56,16 @@
       <!-- Right Column - Controls & Chat -->
       <div class="column is-3">
         <p class="title is-3 mb-5 has-text-grey-dark has-text-right">Obedient Swarm</p>
-        <div id="controlPanel">
-          <div id="chatInput" class="mt-5">
-            <div id="chatLog">
-              <!-- Chat messages go here -->
-            </div>
-            <div class="field mt-4">
-              <div class="control has-icons-right">
-                <input id="chatMessage" class="input is-rounded" type="text" placeholder="Type message...">
-                <span id="sendButton" class="icon is-right is-clickable">
-                  <i class="fas fa-paper-plane has-text-link"></i>
-                </span>
-              </div>
+        <div id="chatPanel">
+          <div id="chatLog">
+            <!-- Chat messages go here -->
+          </div>
+          <div class="field mt-4">
+            <div class="control has-icons-right">
+              <textarea id="chatInput" class="textarea is-rounded" placeholder="Type message..." rows="3"></textarea>
+              <span id="sendButton" class="icon is-right is-clickable">
+                <i class="fas fa-paper-plane has-text-link"></i>
+              </span>
             </div>
           </div>
         </div>

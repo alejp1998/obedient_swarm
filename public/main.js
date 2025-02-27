@@ -8,7 +8,8 @@ function sleep(ms) {
 }
 
 // -------------------- Constants --------------------
-const TIME_STEP = 10;
+const PPC = 100; // Pixels per cell
+const TIME_STEP = 10; // Time step in milliseconds
 
 
 // -------------------- Visualization constants --------------------
@@ -59,8 +60,8 @@ function setCanvasSize() {
   canvas.style.top = `${(containerHeight - canvasDisplayHeight) / 2}px`;
 
   // Keep your original render resolution (consider adding devicePixelRatio scaling)
-  canvas.width = arena.width * 100;
-  canvas.height = arena.height * 100;
+  canvas.width = arena.width * PPC;
+  canvas.height = arena.height * PPC;
 }
 
 
@@ -100,21 +101,21 @@ function drawDashedLine(ctx, start, end, dashLength = 5) {
   ctx.restore();
 }
 
-// Draw grid lines (each cell is 100 pixels)
+// Draw grid lines (each cell is PPC pixels)
 function drawGrid() {
   ctx.save();
   ctx.strokeStyle = 'rgba(200,200,200,1)';
   ctx.lineWidth = 1;
   for (let i = 0; i <= arena.width; i++) {
     ctx.beginPath();
-    ctx.moveTo(i * 100, 0);
-    ctx.lineTo(i * 100, arena.height * 100);
+    ctx.moveTo(i * PPC, 0);
+    ctx.lineTo(i * PPC, arena.height * PPC);
     ctx.stroke();
   }
   for (let j = 0; j <= arena.height; j++) {
     ctx.beginPath();
-    ctx.moveTo(0, j * 100);
-    ctx.lineTo(arena.width * 100, j * 100);
+    ctx.moveTo(0, j * PPC);
+    ctx.lineTo(arena.width * PPC, j * PPC);
     ctx.stroke();
   }
   ctx.restore();
@@ -125,8 +126,8 @@ function drawFormation(group) {
   const { formation_shape, formation_radius } = group.bhvr.params;
   const center = group.virtual_center;
   const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
-  const cx = center[0] * 100;
-  const cy = center[1] * 100;
+  const cx = center[0] * PPC;
+  const cy = center[1] * PPC;
 
   ctx.save();
   ctx.strokeStyle = color;
@@ -134,22 +135,22 @@ function drawFormation(group) {
   ctx.setLineDash([5, 5]);
 
   if (formation_shape === 'circle') {
-    const radius = formation_radius * 100;
+    const radius = formation_radius * PPC;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
     ctx.stroke();
   } else if (formation_shape === 'square') {
-    const size = formation_radius * 2 * 100;
+    const size = formation_radius * 2 * PPC;
     ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
   } else if (formation_shape === 'triangle') {
     const vertices = computeTriangleVertices(formation_radius * 2);
-    const points = vertices.map(v => [cx + v[0] * 100, cy + v[1] * 100]);
+    const points = vertices.map(v => [cx + v[0] * PPC, cy + v[1] * PPC]);
     for (let i = 0; i < 3; i++) {
       drawDashedLine(ctx, points[i], points[(i + 1) % 3]);
     }
   } else if (formation_shape === 'hexagon') {
     const vertices = computeHexagonVertices(formation_radius);
-    const points = vertices.map(v => [cx + v[0] * 100, cy + v[1] * 100]);
+    const points = vertices.map(v => [cx + v[0] * PPC, cy + v[1] * PPC]);
     for (let i = 0; i < 6; i++) {
       drawDashedLine(ctx, points[i], points[(i + 1) % 6]);
     }
@@ -160,7 +161,7 @@ function drawFormation(group) {
 
 // Draw centered text
 function drawCenteredText(text, x, y) {
-  ctx.fillText(text, x * 100, y * 100);
+  ctx.fillText(text, x * PPC, y * PPC);
 }
 
 // Draw map elements (river, lake, road, bridge, forest, field, town, farm) and labels
@@ -180,32 +181,32 @@ function drawMap() {
 
   // Drawing elements
   ctx.fillStyle = 'rgb(135,206,235)'; // light blue
-  ctx.fillRect(riverPos.x * 100, riverPos.y * 100, riverPos.width * 100, riverPos.height * 100);
+  ctx.fillRect(riverPos.x * PPC, riverPos.y * PPC, riverPos.width * PPC, riverPos.height * PPC);
 
-  ctx.fillStyle = 'rgb(69, 69, 251)'; // darker blue
-  ctx.fillRect(lakePos.x * 100, lakePos.y * 100, lakePos.width * 100, lakePos.height * 100);
+  ctx.fillStyle = 'rgb(103, 103, 255)'; // darker blue
+  ctx.fillRect(lakePos.x * PPC, lakePos.y * PPC, lakePos.width * PPC, lakePos.height * PPC);
 
   ctx.fillStyle = 'rgb(100,100,100)'; // gray
-  ctx.fillRect(roadPos.x * 100, roadPos.y * 100, roadPos.width * 100, roadPos.height * 100);
+  ctx.fillRect(roadPos.x * PPC, roadPos.y * PPC, roadPos.width * PPC, roadPos.height * PPC);
 
   ctx.fillStyle = 'rgb(100,100,100)'; // same as road
-  ctx.fillRect(bridgePos.x * 100, bridgePos.y * 100, bridgePos.width * 100, bridgePos.height * 100);
+  ctx.fillRect(bridgePos.x * PPC, bridgePos.y * PPC, bridgePos.width * PPC, bridgePos.height * PPC);
 
   ctx.fillStyle = 'rgb(34,139,34)'; // forest green
-  ctx.fillRect(forestPos.x * 100, forestPos.y * 100, forestPos.width * 100, forestPos.height * 100);
+  ctx.fillRect(forestPos.x * PPC, forestPos.y * PPC, forestPos.width * PPC, forestPos.height * PPC);
 
   ctx.fillStyle = 'rgb(144,238,144)'; // light green
-  ctx.fillRect(fieldPos.x * 100, fieldPos.y * 100, fieldPos.width * 100, fieldPos.height * 100);
+  ctx.fillRect(fieldPos.x * PPC, fieldPos.y * PPC, fieldPos.width * PPC, fieldPos.height * PPC);
 
   ctx.fillStyle = 'rgb(211,211,211)'; // light gray
-  ctx.fillRect(townPos.x * 100, townPos.y * 100, townPos.width * 100, townPos.height * 100);
+  ctx.fillRect(townPos.x * PPC, townPos.y * PPC, townPos.width * PPC, townPos.height * PPC);
 
   ctx.fillStyle = 'rgb(255,165,0)'; // light orange
-  ctx.fillRect(farmPos.x * 100, farmPos.y * 100, farmPos.width * 100, farmPos.height * 100);
+  ctx.fillRect(farmPos.x * PPC, farmPos.y * PPC, farmPos.width * PPC, farmPos.height * PPC);
 
   // Labels
   ctx.fillStyle = '#000';
-  ctx.font = '24px Arial';
+  ctx.font = '30px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -229,10 +230,10 @@ function drawDestination(group) {
   for (let i = 0; i < trajectory.length; i++) {
     const dest = trajectory[i];
     const color = group.robots.length > 1 ? COLORS[group.idx%COLORS.length] : '#000';
-    const px = dest[0] * 100;
-    const py = dest[1] * 100;
+    const px = dest[0] * PPC;
+    const py = dest[1] * PPC;
     const denom = 5;
-    const size = 100 / denom
+    const size = PPC / denom
 
     // Draw cross shape
     ctx.save();
@@ -259,17 +260,17 @@ function drawDestination(group) {
 
 // Draw a robot with a directional line, index label, and target cross
 function drawRobot(robot, color) {
-  const px = robot.x * 100;
-  const py = robot.y * 100;
-  const endX = px + Math.cos(robot.angle) * 30;
-  const endY = py + Math.sin(robot.angle) * 30;
-  const targetX = robot.target_x * 100;
-  const targetY = robot.target_y * 100;
+  const px = robot.x * PPC;
+  const py = robot.y * PPC;
+  const endX = px + Math.cos(robot.angle) * PPC/2;
+  const endY = py + Math.sin(robot.angle) * PPC/2;
+  const targetX = robot.target_x * PPC;
+  const targetY = robot.target_y * PPC;
 
   ctx.save();
   // Directional line
   ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(px, py);
   ctx.lineTo(endX, endY);
@@ -278,29 +279,30 @@ function drawRobot(robot, color) {
   // Robot body (circle with inner white circle)
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(px, py, 15, 0, 2 * Math.PI);
+  ctx.arc(px, py, 25, 0, 2 * Math.PI);
   ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.arc(px, py, 12, 0, 2 * Math.PI);
+  ctx.arc(px, py, 20, 0, 2 * Math.PI);
   ctx.fill();
 
   // Robot index label
   ctx.fillStyle = '#000';
-  ctx.font = '18px Arial';
+  ctx.font = '30px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(robot.idx, px, py);
 
   // Target marker (small cross)
   const denom = 10;
+  const size = PPC / denom;
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(targetX - 100 / denom, targetY - 100 / denom);
-  ctx.lineTo(targetX + 100 / denom, targetY + 100 / denom);
-  ctx.moveTo(targetX + 100 / denom, targetY - 100 / denom);
-  ctx.lineTo(targetX - 100 / denom, targetY + 100 / denom);
+  ctx.moveTo(targetX - size, targetY - size);
+  ctx.lineTo(targetX + size, targetY + size);
+  ctx.moveTo(targetX + size, targetY - size);
+  ctx.lineTo(targetX - size, targetY + size);
   ctx.stroke();
   ctx.restore();
 }
@@ -310,11 +312,11 @@ function drawRobot(robot, color) {
 function drawStatus() {
   ctx.save();
   ctx.fillStyle = '#000';
-  ctx.font = 'bold 26px Arial';
+  ctx.font = 'bold 30px Arial';
   ctx.textAlign = 'left';
-  let yOffset = 0;
+  let yOffset = 10;
   // ctx.fillText(`Simulation Step: ${current_step}`, 10, yOffset);
-  yOffset += 25;
+  yOffset += 30;
 
   // Create behavior description string
   let behaviorString = ""
@@ -324,7 +326,15 @@ function drawStatus() {
         behaviorString = "Move Around";
         break;
       case "form_and_follow_trajectory":
-        behaviorString = "Form & Follow Trajectory (" + group.bhvr.params.formation_shape + ")" + " [" + group.bhvr.params.trajectory.join(",") + "]";
+        trajectoryStr = "";
+        for (let i = 0; i < group.bhvr.params.trajectory.length; i++) {
+          const dest = group.bhvr.params.trajectory[i];
+          trajectoryStr += `(${dest[0]}, ${dest[1]})`;
+          if (i < group.bhvr.params.trajectory.length - 1) {
+            trajectoryStr += " → ";
+          }
+        }
+        behaviorString = "Form & Follow Trajectory (" + group.bhvr.params.formation_shape + ")" + " [" + trajectoryStr + "]";
         break;
       default:
         behaviorString = "None";
@@ -494,7 +504,7 @@ async function sendMessage(message) {
 }
 
 function sendChat() {
-  const chatInput = document.getElementById("chatMessage");
+  const chatInput = document.getElementById("chatInput");
   const chatLog = document.getElementById("chatLog");
   const message = chatInput.value.trim();
   if (message) {
@@ -518,35 +528,26 @@ function fetchChat() {
   fetch('/chat')
     .then(response => response.json())
     .then(data => {
-      // Check if chat data has changed
       if (JSON.stringify(data) === JSON.stringify(chatData)) {
         return;
       }
 
-      // Update chat data
       chatData = data;
 
-      // Update the chat log html
       const chatLog = document.getElementById("chatLog");
-      // Clear the chat log
-      chatLog.innerHTML = "";
-      // Append messages to the chat log
-      data.forEach(message => {
-        if (message.role === "user") {
-          const userMessage = document.createElement("div");
-          userMessage.classList.add("chat-message", "user-message");
-          userMessage.textContent = message.content;
-          chatLog.appendChild(userMessage);
-        } else if (message.role === "ai") {
-          const aiMessage = document.createElement("div");
-          aiMessage.classList.add("chat-message", "ai-message");
-          aiMessage.textContent = message.content;
-          chatLog.appendChild(aiMessage);
-        }
+      chatLog.innerHTML = ""; // Clear chat log
 
-        // Scroll to the bottom of the chat log
-        chatLog.scrollTop = chatLog.scrollHeight;
+      data.forEach(message => {
+        const messageElement = document.createElement("div");
+        messageElement.classList.add("chat-message", message.role === "user" ? "user-message" : "ai-message");
+
+        // Convert Markdown to HTML
+        messageElement.innerHTML = marked.parse(message.content, breaks=true);
+        
+        chatLog.appendChild(messageElement);
       });
+
+      chatLog.scrollTop = chatLog.scrollHeight;
     })
     .catch(error => console.error("Error fetching chat:", error));
 }
@@ -625,7 +626,6 @@ function toggleReset() {
   // Reset simulation state
   sendCommand('reset'); 
 }
-function toggleStop() { sendCommand('stop'); }
 
 
 // -------------------- Initialization --------------------
@@ -634,16 +634,16 @@ function toggleStop() { sendCommand('stop'); }
 document.getElementById("sendButton").onclick = sendChat;
 
 // Add event listener to chat input field
-document.getElementById("chatMessage").addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
+document.getElementById("chatInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) { // Avoid Shift+Enter issue
+    event.preventDefault();  // Stop default new line
     sendChat();
-  }
+}
 });
 
 // Add event listeners to control buttons
 document.getElementById("pause-button").onclick = togglePause;
 document.getElementById("reset-button").onclick = toggleReset;
-document.getElementById("stop-button").onclick = toggleStop;
 
 // Add canvas sizing event listener
 window.addEventListener('resize', setCanvasSize);

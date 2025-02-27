@@ -31,7 +31,7 @@ FORMATION_RADIUS = 2
 # SIMULATION SETTINGS
 NUMBER_OF_ROBOTS = 20
 NUMBER_OF_GROUPS = 3
-MAX_SPEED = 0.05
+MAX_SPEED = 0.02
 FORMATION_SHAPES = ['circle', 'square', 'triangle', 'hexagon']
 FIELD_START_X = 1
 FIELD_START_Y = 0
@@ -54,7 +54,7 @@ def initialize_destinations(n):
 def initialize_swarm():
     x, y = initialize_robot_positions(NUMBER_OF_ROBOTS, FIELD_START_X, FIELD_START_Y, 
                                     FIELD_START_X + FIELD_WIDTH, FIELD_START_Y + FIELD_HEIGHT)
-    robots = [Robot(idx, x, y) for idx, (x, y) in enumerate(zip(x, y))]
+    robots = [Robot(idx, x, y, max_speed=MAX_SPEED) for idx, (x, y) in enumerate(zip(x, y))]
     swarm = Swarm(robots)
     
     return swarm
@@ -65,17 +65,15 @@ swarm = initialize_swarm()
 # Simulation variables initialization
 simulation_lock = Lock()
 simulation_state = {
-    "running": False,
+    "running": True,
     "current_step": 0,
     "swarm": swarm
 }
 
 # Chat variables
 initial_messages = [
-    {"role": "ai", "content": "Hello! Welcome to Obedient Swarm.\n"},
-    {"role": "ai", "content": "Tell me how to group the drones and what behaviors they should have and I'll do it for you."},
-    {"role": "ai", "content": "Example Command 1: I want to group the drones in 4 groups"},
-    {"role": "ai", "content": "Example Command 2: Group 1 should form in a circle of radius 1.0 and move towards the lake"},
+    {"role": "ai", "content": "Hello! Welcome to **Obedient Swarm** ;)"},
+    {"role": "ai", "content": "Tell me how to group the drones and what behaviors the groups should have, and I'll do it for you."},
 ]
 
 # Agent Initialization
@@ -146,8 +144,6 @@ def control():
             agent_state["messages"] = initial_messages.copy()
         elif command == 'pause':
             simulation_state["running"] = not simulation_state["running"]
-        elif command == 'stop':
-            print("Stopping simulation - What should we do here?")
     return jsonify({"status": "ok"})
 
 @app.route('/message', methods=['POST'])
