@@ -24,7 +24,7 @@
 1.  Clone the repository:
 
     ```bash
-    git clone [https://github.com/alejp1998/obedient-swarm.git](https://www.google.com/search?q=https://github.com/alejp1998/obedient-swarm.git)
+    git clone https://github.com/alejp1998/obedient-swarm.git
     cd obedient-swarm
     ```
 
