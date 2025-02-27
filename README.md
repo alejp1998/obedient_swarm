@@ -64,3 +64,6 @@
 ## Docker Setup
 
 The application is containerized using Docker. The `docker-compose.yaml` file defines the `webapp` service, which builds the application using the `Dockerfile-webapp`.
+
+## License
+This project is licensed under the MIT License.
